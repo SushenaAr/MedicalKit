@@ -2,11 +2,12 @@
 node_modules/
 dist/
 
-# Python (backend в следующих работах)
+# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # Секреты и локальные настройки
 .env

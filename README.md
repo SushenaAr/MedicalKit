@@ -11,8 +11,9 @@
 | Часть | Технологии |
 |---|---|
 | Frontend | React 19, TypeScript, Vite, React Router, MUI (Material UI) |
-| Backend *(ЛР 2+)* | Python, FastAPI |
-| База данных *(ЛР 2+)* | PostgreSQL, SQLAlchemy |
+| Backend | Python 3.12+, FastAPI, Pydantic, Uvicorn |
+| База данных | PostgreSQL 17 (в Docker), SQLAlchemy 2, миграции Alembic |
+| Тесты backend | pytest |
 
 ## Назначение и пользователи
 
@@ -105,12 +106,219 @@ frontend/src/
 └── App.tsx       # Маршруты
 ```
 
-## Текущее состояние (ЛР 1)
+## Backend
 
-- Реализованы все основные экраны и навигация между ними (React Router).
-- Используется библиотека компонентов MUI: единое оформление, адаптивная вёрстка
-  (на узких экранах меню скрывается в выдвижную панель).
-- Данные демонстрационные и хранятся в памяти браузера: изменения сбрасываются при
-  перезагрузке страницы. Сроки демо-лекарств считаются от текущей даты, поэтому на экранах
-  всегда есть и просроченные, и истекающие позиции. В следующих работах данные будут
-  храниться в PostgreSQL и приходить через API на FastAPI.
+### Модель данных
+
+```mermaid
+erDiagram
+    categories ||--o{ medicines : "category_id (SET NULL)"
+    categories }o--o{ shelters : "shelter_categories"
+    medicines ||--o| donations : "medicine_id (CASCADE, UNIQUE)"
+    shelters ||--o{ donations : "shelter_id (RESTRICT)"
+
+    categories {
+        int id PK
+        varchar name UK
+    }
+    medicines {
+        int id PK
+        varchar name
+        varchar substance
+        enum form
+        varchar quantity
+        date expires_at
+        bool opened
+        varchar location
+        text notes
+        int category_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    shelters {
+        int id PK
+        varchar name UK
+        enum kind
+        varchar address
+        smallint min_months_left
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    shelter_categories {
+        int shelter_id PK,FK
+        int category_id PK,FK
+    }
+    donations {
+        int id PK
+        int medicine_id FK,UK
+        int shelter_id FK
+        enum status
+        timestamptz created_at
+        timestamptz handed_at
+    }
+```
+
+| Таблица | Назначение |
+|---|---|
+| `medicines` | Лекарства в аптечке. Статус срока (`expired` / `soon` / `ok`) и `days_left` не хранятся, а вычисляются при ответе |
+| `categories` | Группы лекарств: «Антисептики», «Антигистаминные» и т. п. |
+| `shelters` | Приюты: тип (`animals` / `people`), адрес, минимальный остаток срока в месяцах |
+| `shelter_categories` | Связь «многие ко многим»: какие категории принимает приют. Пустой список — принимает любые |
+| `donations` | Список «Отдать до срока»: лекарство (одно лекарство — одна запись), выбранный приют, статус `planned` / `handed` |
+
+Связи и поведение при удалении:
+
+- **лекарство → категория** (многие к одному): при удалении категории у лекарств `category_id` становится `NULL`;
+- **приют ↔ категория** (многие ко многим): при удалении приюта или категории удаляются строки связи;
+- **лекарство → запись о передаче** (один к одному): при удалении лекарства удаляется и его запись;
+- **приют → записи о передаче** (один ко многим): приют с передачами удалить нельзя (`RESTRICT`, ответ 409).
+
+Ограничения в БД: уникальные названия категорий и приютов, `min_months_left >= 0`,
+у переданного лекарства обязательно указаны приют и дата передачи (`CHECK`).
+
+### Бизнес-правила
+
+- В список на передачу можно добавить только **невскрытое** лекарство с остатком срока **не меньше 30 дней**.
+- Приют принимает лекарство, если остаток срока не меньше его `min_months_left` × 30 дней
+  и категория лекарства входит в принимаемые приютом (если список категорий задан).
+- Отметить передачу (`status: handed`) можно только после выбора приюта. Переданную запись нельзя изменить или удалить.
+- Нельзя изменить лекарство из списка на передачу так, чтобы его стало нельзя передать (например, отметить вскрытым).
+- Рекомендации «отдать» — невскрытые лекарства не из списка с остатком срока от 30 до 180 дней.
+
+### API
+
+Документация Swagger доступна после запуска: <http://localhost:8000/docs>.
+
+| Метод и путь | Действие |
+|---|---|
+| `GET /api/medicines?status=&search=&category_id=` | Список лекарств (фильтры по статусу срока, тексту, категории) |
+| `POST /api/medicines` | Добавить лекарство |
+| `GET / PATCH / DELETE /api/medicines/{id}` | Получить, изменить, удалить лекарство |
+| `GET / POST /api/categories`, `GET / PATCH / DELETE /api/categories/{id}` | CRUD категорий |
+| `GET / POST /api/shelters`, `GET / PATCH / DELETE /api/shelters/{id}` | CRUD приютов (`category_ids` — принимаемые категории) |
+| `GET /api/donations?status=&shelter_id=` | Список на передачу и история |
+| `GET /api/donations/suggestions` | Рекомендуем отдать |
+| `POST /api/donations` | Добавить лекарство в список |
+| `GET / PATCH / DELETE /api/donations/{id}` | Получить запись, выбрать приют или отметить передачу, убрать из списка |
+| `GET /api/health` | Проверка работы API и подключения к БД |
+
+Коды ответов и формат ошибок:
+
+| Код | Когда | Тело ответа |
+|---|---|---|
+| `200` / `201` / `204` | Успешное чтение / создание / удаление | Данные или пусто |
+| `404` | Нет записи с id из адреса | `{"detail": "Не найдено: лекарство с id=999"}` |
+| `409` | Нарушено бизнес-правило или ограничение данных | `{"detail": "Передать можно только лекарство в невскрытой упаковке"}` |
+| `422` | Некорректные данные или ссылка на несуществующую запись в теле | `{"detail": "Некорректные данные запроса", "errors": [{"field": "name", "message": "Обязательное поле"}]}` |
+| `503` | База данных недоступна | `{"detail": "База данных недоступна"}` |
+
+![Swagger](docs/screenshots/09-api-swagger.png)
+
+### Структура backend
+
+```
+backend/
+├── app/
+│   ├── main.py            # Создание приложения FastAPI, CORS, обработчики ошибок
+│   ├── core/
+│   │   ├── config.py      # Конфигурация из переменных окружения / backend/.env
+│   │   └── errors.py      # Исключения бизнес-логики (NotFound, Conflict, InvalidReference)
+│   ├── db/
+│   │   ├── base.py        # Базовый класс моделей, соглашение об именах ограничений
+│   │   └── session.py     # Подключение к PostgreSQL, сессия на запрос (get_db)
+│   ├── models/            # Модели SQLAlchemy (таблицы и связи)
+│   ├── schemas/           # Схемы Pydantic: валидация запросов и формат ответов
+│   ├── services/          # Операции с данными и бизнес-правила
+│   ├── api/
+│   │   ├── routes/        # Маршруты API по сущностям
+│   │   ├── router.py      # Общий роутер /api и /api/health
+│   │   ├── errors.py      # Перевод исключений в HTTP-ответы с сообщениями на русском
+│   │   └── deps.py        # Общие зависимости маршрутов
+│   └── seed.py            # Демонстрационные данные
+├── alembic/               # Миграции БД
+├── tests/                 # Тесты API на отдельной тестовой базе
+├── .env.example           # Пример настроек без секретов
+└── requirements.txt
+```
+
+Запрос проходит слои сверху вниз: `api/routes` (HTTP) → `schemas` (валидация) → `services`
+(правила и запросы к БД) → `models` (таблицы). Сервисы не знают про HTTP: они выбрасывают
+исключения из `core/errors.py`, а коды ответов выставляет `api/errors.py`.
+
+## Запуск backend
+
+Требуются Python 3.12+ и Docker (для PostgreSQL). Команды выполняются из корня репозитория.
+
+1. **Настройки.** Скопируйте пример и задайте свой пароль БД в `backend/.env`:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+2. **База данных.** Запустите PostgreSQL в Docker — пользователь, пароль и имя базы берутся из `backend/.env`:
+
+   ```bash
+   docker compose up -d db
+   ```
+
+   Можно использовать и установленный локально PostgreSQL — тогда укажите его параметры в `backend/.env`.
+
+3. **Зависимости.**
+
+   ```bash
+   cd backend
+   python -m venv .venv
+   .venv\Scripts\activate          # Windows
+   # source .venv/bin/activate     # Linux / macOS
+   pip install -r requirements.txt
+   ```
+
+4. **Создание таблиц** (миграции Alembic):
+
+   ```bash
+   alembic upgrade head
+   ```
+
+5. **Демонстрационные данные** (необязательно):
+
+   ```bash
+   python -m app.seed            # заполнить пустую базу
+   python -m app.seed --reset    # очистить и заполнить заново
+   ```
+
+6. **Запуск API:**
+
+   ```bash
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+   API: <http://localhost:8000/api>, документация: <http://localhost:8000/docs>.
+
+### Тесты
+
+```bash
+cd backend
+pytest
+```
+
+Тесты создают отдельную базу `<POSTGRES_DB>_test` на том же сервере и не трогают основную.
+Проверяются CRUD всех сущностей, сохранение в БД, связи (каскадное удаление, `SET NULL`,
+запрет удаления приюта с передачами), бизнес-правила и сообщения об ошибках.
+
+### Новая миграция после изменения моделей
+
+```bash
+alembic revision --autogenerate -m "описание изменения"
+alembic upgrade head
+```
+
+## Текущее состояние
+
+**ЛР 1.** Реализованы все основные экраны и навигация между ними (React Router), библиотека
+компонентов MUI, адаптивная вёрстка. Frontend пока работает на демонстрационных данных
+в памяти браузера.
+
+**ЛР 2.** Реализован backend на FastAPI: модель данных из пяти связанных таблиц в PostgreSQL,
+CRUD для лекарств, категорий, приютов и списка на передачу, бизнес-правила передачи,
+валидация запросов, понятные сообщения об ошибках и HTTP-статусы, миграции Alembic,
+демонстрационные данные и автотесты. Подключение frontend к API — в следующих работах.
