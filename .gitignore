@@ -1,0 +1,21 @@
+# Зависимости и сборка
+node_modules/
+dist/
+
+# Python (backend в следующих работах)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Секреты и локальные настройки
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+
+# Методические материалы курса
+*.pdf
