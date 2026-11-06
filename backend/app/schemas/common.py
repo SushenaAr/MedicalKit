@@ -34,6 +34,7 @@ class OutputSchema(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+    code: str | None = None
 
 
 class FieldError(BaseModel):

@@ -10,8 +10,10 @@ export interface Shelter {
   name: string
   kind: ShelterKind
   address: string
-  /** Какие группы лекарств принимает приют */
+  /** Какие группы лекарств принимает приют (названия категорий) */
   accepts: string[]
+  /** id принимаемых категорий; пустой список — приют принимает любые */
+  acceptsCategoryIds: string[]
   /** Минимальный остаток срока годности, с которым принимают лекарства */
   minMonthsLeft: number
 }

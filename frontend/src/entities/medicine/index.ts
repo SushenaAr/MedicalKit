@@ -4,6 +4,7 @@ export type {
   DonationStatus,
   Medicine,
   MedicineForm,
+  MedicineCategory,
   MedicineInput,
   MedicinePatch,
 } from './model/types.ts'
@@ -27,6 +28,7 @@ export {
   isHanded,
   isPlanned,
   shelterAccepts,
+  shelterRejectReason,
 } from './model/donation.ts'
 export { MedicineProvider } from './model/MedicineProvider.tsx'
 export { useMedicines } from './model/useMedicines.ts'

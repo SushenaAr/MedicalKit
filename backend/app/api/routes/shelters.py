@@ -1,6 +1,9 @@
 from fastapi import APIRouter, status
 
-from app.api.deps import CONFLICT, NOT_FOUND, DbSession
+from app.api.deps import CONFLICT, FORBIDDEN, NOT_FOUND, UNAUTHORIZED, AdminUser, DbSession
+
+# Справочник публичный: читать могут все, изменять — только администратор
+ADMIN_ONLY = {**UNAUTHORIZED, **FORBIDDEN}
 from app.schemas.shelter import ShelterCreate, ShelterRead, ShelterUpdate
 from app.services import shelters as service
 
@@ -16,10 +19,10 @@ def list_shelters(db: DbSession):
     "",
     response_model=ShelterRead,
     status_code=status.HTTP_201_CREATED,
-    responses=CONFLICT,
+    responses={**CONFLICT, **ADMIN_ONLY},
     summary="Добавить приют",
 )
-def create_shelter(data: ShelterCreate, db: DbSession):
+def create_shelter(data: ShelterCreate, db: DbSession, _: AdminUser):
     return service.create_shelter(db, data)
 
 
@@ -31,20 +34,20 @@ def get_shelter(shelter_id: int, db: DbSession):
 @router.patch(
     "/{shelter_id}",
     response_model=ShelterRead,
-    responses={**NOT_FOUND, **CONFLICT},
+    responses={**NOT_FOUND, **CONFLICT, **ADMIN_ONLY},
     summary="Изменить приют",
     description="category_ids, если передан, полностью заменяет список принимаемых категорий.",
 )
-def update_shelter(shelter_id: int, data: ShelterUpdate, db: DbSession):
+def update_shelter(shelter_id: int, data: ShelterUpdate, db: DbSession, _: AdminUser):
     return service.update_shelter(db, shelter_id, data)
 
 
 @router.delete(
     "/{shelter_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={**NOT_FOUND, **CONFLICT},
+    responses={**NOT_FOUND, **CONFLICT, **ADMIN_ONLY},
     summary="Удалить приют",
     description="Нельзя удалить приют, к которому привязаны передачи лекарств.",
 )
-def delete_shelter(shelter_id: int, db: DbSession) -> None:
+def delete_shelter(shelter_id: int, db: DbSession, _: AdminUser) -> None:
     service.delete_shelter(db, shelter_id)

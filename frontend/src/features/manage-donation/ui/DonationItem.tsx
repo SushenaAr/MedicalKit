@@ -3,7 +3,7 @@ import { Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography 
 import {
   DonationChip,
   ExpiryChip,
-  shelterAccepts,
+  shelterRejectReason,
   useMedicines,
   type Medicine,
 } from '../../../entities/medicine/index.ts'
@@ -19,18 +19,18 @@ function shelterHint(status: LoadStatus, chosen: boolean): string | undefined {
 }
 
 function shelterOption(shelter: Shelter, medicine: Medicine) {
-  const accepts = shelterAccepts(shelter, medicine)
+  const reason = shelterRejectReason(shelter, medicine)
   return (
-    <MenuItem key={shelter.id} value={shelter.id} disabled={!accepts}>
+    <MenuItem key={shelter.id} value={shelter.id} disabled={reason !== null}>
       {shelter.name}
-      {!accepts && ` (нужен срок от ${shelter.minMonthsLeft} мес.)`}
+      {reason && ` (${reason})`}
     </MenuItem>
   )
 }
 
 /**
  * Строка списка на передачу: выбор приюта, отметка «передано», удаление из списка.
- * Приюты, которые не примут лекарство из-за остатка срока, недоступны для выбора.
+ * Приюты, которые не примут лекарство (по остатку срока или категории), недоступны для выбора.
  */
 export function DonationItem({ medicine }: { medicine: Medicine }) {
   const { setDonationShelter, markHanded, cancelDonation } = useMedicines()

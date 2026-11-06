@@ -45,8 +45,8 @@ const FORM_OPTIONS = Object.entries(FORM_LABELS) as [Form, string][]
 
 /**
  * Форма лекарства с клиентской валидацией.
- * Ошибка поля показывается после того, как пользователь покинул поле или попытался сохранить,
- * и исчезает сразу после исправления. Используется и для добавления, и для редактирования.
+ * Ошибка заполненного поля показывается, когда пользователь покинул поле, а пустого обязательного —
+ * после попытки сохранить; исчезает сразу после исправления. Используется и для добавления, и для редактирования.
  */
 export function MedicineForm({
   initialValues = EMPTY_VALUES,
@@ -73,7 +73,12 @@ export function MedicineForm({
     setValues((prev) => ({ ...prev, [field]: value }))
   }
 
-  const touch = (field: FieldName) => () => setTouched((prev) => ({ ...prev, [field]: true }))
+  // Ошибку поля показываем после ухода с него, но только если в нём что-то введено:
+  // «обязательное поле» — после попытки отправки. Иначе подсказка под пустым полем появлялась бы
+  // в момент клика по ссылке или кнопке ниже, сдвигала вёрстку, и клик проходил мимо.
+  const touch = (field: FieldName) => () => {
+    if (field === 'opened' || values[field] !== '') setTouched((prev) => ({ ...prev, [field]: true }))
+  }
 
   const textFieldProps = (field: Exclude<FieldName, 'opened' | 'form'>) => ({
     value: values[field],

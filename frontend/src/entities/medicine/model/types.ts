@@ -15,8 +15,15 @@ export const FORM_LABELS: Record<MedicineForm, string> = {
 export type DonationStatus = 'planned' | 'handed'
 
 export interface Donation {
+  /** id записи о передаче — нужен для её изменения и удаления */
+  id: string
   shelterId: string | null
   status: DonationStatus
+}
+
+export interface MedicineCategory {
+  id: string
+  name: string
 }
 
 export interface Medicine {
@@ -30,10 +37,11 @@ export interface Medicine {
   opened: boolean
   location: string
   notes?: string
+  category?: MedicineCategory
   donation?: Donation
 }
 
 /** Данные, которые пользователь вводит в форме лекарства */
-export type MedicineInput = Omit<Medicine, 'id' | 'donation'>
+export type MedicineInput = Omit<Medicine, 'id' | 'donation' | 'category'>
 
 export type MedicinePatch = Partial<MedicineInput>

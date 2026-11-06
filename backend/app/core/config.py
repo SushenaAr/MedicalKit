@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -26,6 +27,17 @@ class Settings(BaseSettings):
     postgres_db: str
 
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Аутентификация
+    jwt_secret: str = Field(min_length=32, description="Секрет для подписи access-токенов (HS256)")
+    jwt_algorithm: str = "HS256"
+    access_token_ttl_minutes: int = Field(15, gt=0)
+    refresh_token_ttl_days: int = Field(30, gt=0)
+    # Повторное предъявление уже обновлённого refresh-токена в течение этого времени считается
+    # гонкой двух вкладок, а не кражей токена, и не завершает сессию
+    refresh_reuse_grace_seconds: int = Field(10, ge=0)
+    # В production cookie с refresh-токеном должна передаваться только по HTTPS
+    refresh_cookie_secure: bool = False
 
     def database_url(self, database: str | None = None) -> URL:
         return URL.create(

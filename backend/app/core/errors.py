@@ -8,9 +8,23 @@
 class AppError(Exception):
     status_code = 400
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, code: str | None = None) -> None:
         super().__init__(message)
         self.message = message
+        # Необязательный машиночитаемый код, по которому клиент может выбрать реакцию
+        self.code = code
+
+
+class UnauthorizedError(AppError):
+    """Пользователь не аутентифицирован: нет токена, он неверный, истёк или отозван."""
+
+    status_code = 401
+
+
+class ForbiddenError(AppError):
+    """Пользователь аутентифицирован, но у него нет права на операцию."""
+
+    status_code = 403
 
 
 class NotFoundError(AppError):

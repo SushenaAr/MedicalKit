@@ -13,11 +13,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import app.models  # noqa: F401
 from app.core.config import settings
+from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models import User, UserRole
 
 TEST_DB = f"{settings.postgres_db}_test"
+
+ADMIN_EMAIL = "admin@test.ru"
+PASSWORD = "Secret123"
 
 
 def _create_test_database() -> None:
@@ -48,14 +53,16 @@ def engine() -> Iterator[Engine]:
 def session_factory(engine: Engine) -> sessionmaker[Session]:
     with engine.begin() as conn:
         conn.execute(text(
-            "TRUNCATE donations, medicines, shelter_categories, shelters, categories "
-            "RESTART IDENTITY CASCADE"
+            "TRUNCATE refresh_tokens, users, donations, medicines, shelter_categories, shelters, "
+            "categories RESTART IDENTITY CASCADE"
         ))
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 @pytest.fixture
-def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
+def anon(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
+    """Клиент без входа в систему."""
+
     def override_get_db() -> Iterator[Session]:
         with session_factory() as session:
             yield session
@@ -64,6 +71,36 @@ def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(session_factory: sessionmaker[Session], anon: TestClient) -> Iterator[TestClient]:
+    """Клиент, вошедший как администратор: ему доступны и свои лекарства, и изменение справочников."""
+    with session_factory() as session:
+        session.add(
+            User(email=ADMIN_EMAIL, name="Админ", password_hash=hash_password(PASSWORD), role=UserRole.ADMIN)
+        )
+        session.commit()
+    with TestClient(app) as admin_client:
+        admin_client.headers["Authorization"] = f"Bearer {login(admin_client, ADMIN_EMAIL)}"
+        yield admin_client
+
+
+def login(client: TestClient, email: str, password: str = PASSWORD) -> str:
+    response = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200, response.json()
+    return response.json()["access_token"]
+
+
+def register(client: TestClient, email: str, password: str = PASSWORD, name: str = "Пользователь") -> str:
+    """Регистрирует пользователя и возвращает его access-токен."""
+    response = client.post("/api/auth/register", json={"email": email, "password": password, "name": name})
+    assert response.status_code == 201, response.json()
+    return response.json()["access_token"]
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture

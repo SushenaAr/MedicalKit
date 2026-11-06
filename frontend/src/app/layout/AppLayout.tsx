@@ -22,7 +22,7 @@ import DonateIcon from '@mui/icons-material/VolunteerActivismOutlined'
 import ShelterIcon from '@mui/icons-material/HomeWorkOutlined'
 import LocalPharmacyIcon from '@mui/icons-material/LocalPharmacy'
 import { routes } from '../../shared/config/routes.ts'
-import { demoMode } from '../../shared/api/index.ts'
+import { UserMenu } from '../../features/auth/index.ts'
 import { Appear } from '../../shared/ui/index.ts'
 
 const DRAWER_WIDTH = 248
@@ -73,8 +73,7 @@ export function AppLayout() {
       </List>
       <Divider sx={{ mx: 2 }} />
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 2 }}>
-        Демонстрационные данные{demoMode !== 'normal' && ` (режим «${demoMode}»)`}. Не является медицинской
-        рекомендацией.
+        Учебный проект. Не является медицинской рекомендацией.
       </Typography>
     </Box>
   )
@@ -102,6 +101,8 @@ export function AppLayout() {
           >
             Домашняя аптечка
           </Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <UserMenu />
         </Toolbar>
       </AppBar>
 

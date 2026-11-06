@@ -20,3 +20,8 @@ class ShelterKind(StrEnum):
 class DonationStatus(StrEnum):
     PLANNED = "planned"
     HANDED = "handed"
+
+
+class UserRole(StrEnum):
+    USER = "user"
+    ADMIN = "admin"

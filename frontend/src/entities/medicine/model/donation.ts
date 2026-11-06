@@ -31,8 +31,20 @@ export function isDonationSuggested(medicine: Medicine): boolean {
   return canDonate(medicine) && !medicine.donation && daysLeft(medicine) <= DONATE_SUGGEST_MAX_DAYS
 }
 
+/** Примет ли приют лекарство: по остатку срока и по категории (те же правила, что на backend) */
 export function shelterAccepts(shelter: Shelter, medicine: Medicine): boolean {
-  return daysLeft(medicine) >= shelter.minMonthsLeft * 30
+  if (daysLeft(medicine) < shelter.minMonthsLeft * 30) return false
+  const categoryId = medicine.category?.id
+  return (
+    shelter.acceptsCategoryIds.length === 0 || !categoryId || shelter.acceptsCategoryIds.includes(categoryId)
+  )
+}
+
+/** Почему приют не примет лекарство — подпись к недоступному пункту выбора */
+export function shelterRejectReason(shelter: Shelter, medicine: Medicine): string | null {
+  if (daysLeft(medicine) < shelter.minMonthsLeft * 30) return `нужен срок от ${shelter.minMonthsLeft} мес.`
+  if (!shelterAccepts(shelter, medicine)) return `не принимают «${medicine.category?.name}»`
+  return null
 }
 
 export function isPlanned(medicine: Medicine): boolean {

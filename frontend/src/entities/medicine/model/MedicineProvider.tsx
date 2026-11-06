@@ -6,8 +6,8 @@ import type { Medicine } from './types.ts'
 
 /**
  * Хранилище лекарств: загружает список и выполняет операции через API.
- * Локальное состояние меняется только после успешного ответа, поэтому
- * при ошибке интерфейс остаётся в согласованном с «сервером» состоянии.
+ * Локальное состояние меняется только после успешного ответа сервера, поэтому
+ * при ошибке интерфейс остаётся в согласованном с базой данных состоянии.
  */
 export function MedicineProvider({ children }: { children: ReactNode }) {
   const { items, status, error, reload, setItems } = useAsyncList(medicineApi.list)
@@ -20,8 +20,13 @@ export function MedicineProvider({ children }: { children: ReactNode }) {
     [setItems],
   )
 
-  const store = useMemo<MedicineStore>(
-    () => ({
+  const store = useMemo<MedicineStore>(() => {
+    const find = (id: string): Medicine => {
+      const medicine = items.find((m) => m.id === id)
+      if (!medicine) throw new Error('Лекарство не найдено')
+      return medicine
+    }
+    return {
       medicines: items,
       status,
       error,
@@ -36,14 +41,13 @@ export function MedicineProvider({ children }: { children: ReactNode }) {
         await medicineApi.remove(id)
         setItems((list) => list.filter((m) => m.id !== id))
       },
-      planDonation: async (id) => replace(await medicineApi.planDonation(id)),
+      planDonation: async (id) => replace(await medicineApi.planDonation(find(id))),
       setDonationShelter: async (id, shelterId) =>
-        replace(await medicineApi.setDonationShelter(id, shelterId)),
-      markHanded: async (id) => replace(await medicineApi.markHanded(id)),
-      cancelDonation: async (id) => replace(await medicineApi.cancelDonation(id)),
-    }),
-    [items, status, error, reload, setItems, replace],
-  )
+        replace(await medicineApi.setDonationShelter(find(id), shelterId)),
+      markHanded: async (id) => replace(await medicineApi.markHanded(find(id))),
+      cancelDonation: async (id) => replace(await medicineApi.cancelDonation(find(id))),
+    }
+  }, [items, status, error, reload, setItems, replace])
 
   return <MedicineContext.Provider value={store}>{children}</MedicineContext.Provider>
 }

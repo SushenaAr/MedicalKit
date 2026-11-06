@@ -10,6 +10,7 @@ from app.models.enums import MedicineForm
 if TYPE_CHECKING:
     from app.models.category import Category
     from app.models.donation import Donation
+    from app.models.user import User
 
 
 class Medicine(TimestampMixin, Base):
@@ -18,6 +19,8 @@ class Medicine(TimestampMixin, Base):
     __tablename__ = "medicines"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Владелец: лекарства — личные данные пользователя, другим они недоступны
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     substance: Mapped[str] = mapped_column(String(200), default="", server_default="")
     form: Mapped[MedicineForm] = mapped_column(pg_enum(MedicineForm, "medicine_form"))
@@ -30,6 +33,7 @@ class Medicine(TimestampMixin, Base):
         ForeignKey("categories.id", ondelete="SET NULL"), index=True
     )
 
+    owner: Mapped["User"] = relationship(back_populates="medicines")
     category: Mapped["Category | None"] = relationship(back_populates="medicines")
     # Связь «один к одному»: лекарство может стоять в списке на передачу только один раз
     donation: Mapped["Donation | None"] = relationship(

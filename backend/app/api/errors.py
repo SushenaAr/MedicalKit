@@ -57,7 +57,12 @@ def _message(error: dict[str, Any]) -> str:
 
 async def app_error_handler(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+    content: dict[str, Any] = {"detail": exc.message}
+    if exc.code is not None:
+        content["code"] = exc.code
+    # RFC 6750: ответ 401 сообщает клиенту схему аутентификации
+    headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == status.HTTP_401_UNAUTHORIZED else None
+    return JSONResponse(status_code=exc.status_code, content=content, headers=headers)
 
 
 async def validation_error_handler(_: Request, exc: Exception) -> JSONResponse:

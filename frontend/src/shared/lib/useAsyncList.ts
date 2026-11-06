@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { errorMessage } from '../api/fakeRequest.ts'
+import { errorMessage } from '../api/errors.ts'
 
 export type LoadStatus = 'loading' | 'error' | 'success'
 
@@ -12,42 +12,33 @@ export interface AsyncList<T> {
   setItems: Dispatch<SetStateAction<T[]>>
 }
 
-/**
- * Загружает список при монтировании и хранит состояние загрузки, ошибки и данных.
- * `load` получает номер попытки: 0 — автоматическая загрузка, 1, 2… — повтор по кнопке.
- */
-export function useAsyncList<T>(load: (attempt: number) => Promise<T[]>): AsyncList<T> {
+/** Загружает список при монтировании и хранит состояние загрузки, ошибки и данных */
+export function useAsyncList<T>(load: () => Promise<T[]>): AsyncList<T> {
   const [items, setItems] = useState<T[]>([])
   const [status, setStatus] = useState<LoadStatus>('loading')
   const [error, setError] = useState<string | null>(null)
   const requestId = useRef(0)
-  const attempts = useRef(0)
 
-  const run = useCallback(
-    (attempt: number) => {
-      const id = ++requestId.current
-      setStatus('loading')
-      setError(null)
-      load(attempt).then(
-        (data) => {
-          if (id !== requestId.current) return
-          setItems(data)
-          setStatus('success')
-        },
-        (reason: unknown) => {
-          if (id !== requestId.current) return
-          setError(errorMessage(reason))
-          setStatus('error')
-        },
-      )
-    },
-    [load],
-  )
-
-  const reload = useCallback(() => run(++attempts.current), [run])
+  const run = useCallback(() => {
+    const id = ++requestId.current
+    setStatus('loading')
+    setError(null)
+    load().then(
+      (data) => {
+        if (id !== requestId.current) return
+        setItems(data)
+        setStatus('success')
+      },
+      (reason: unknown) => {
+        if (id !== requestId.current) return
+        setError(errorMessage(reason))
+        setStatus('error')
+      },
+    )
+  }, [load])
 
   useEffect(() => {
-    run(0)
+    run()
     // При размонтировании ответы устаревших запросов игнорируются
     const latest = requestId
     return () => {
@@ -55,5 +46,5 @@ export function useAsyncList<T>(load: (attempt: number) => Promise<T[]>): AsyncL
     }
   }, [run])
 
-  return { items, status, error, reload, setItems }
+  return { items, status, error, reload: run, setItems }
 }

@@ -7,4 +7,6 @@ export const routes = {
   editMedicine: (id: string) => `/medicines/${id}/edit`,
   donate: () => '/donate',
   shelters: () => '/shelters',
+  login: () => '/login',
+  register: () => '/register',
 } as const

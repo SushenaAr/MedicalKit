@@ -5,9 +5,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import ConflictError
-from app.models import Category, DonationStatus, Medicine
+from app.models import Category, DonationStatus, Medicine, User
 from app.schemas.medicine import MedicineCreate, MedicineUpdate
-from app.services.common import get_or_404, resolve_reference
+from app.services.common import get_own_medicine, resolve_reference
 from app.services.expiry import (
     SOON_DAYS,
     ExpiryStatus,
@@ -22,6 +22,7 @@ def _escape_like(text: str) -> str:
 
 def list_medicines(
     db: Session,
+    owner: User,
     status: ExpiryStatus | None = None,
     search: str | None = None,
     category_id: int | None = None,
@@ -32,6 +33,7 @@ def list_medicines(
     stmt = (
         select(Medicine)
         .options(selectinload(Medicine.category), selectinload(Medicine.donation))
+        .where(Medicine.owner_id == owner.id)
         .order_by(Medicine.expires_at, Medicine.id)
     )
     if status is ExpiryStatus.EXPIRED:
@@ -56,22 +58,22 @@ def list_medicines(
     return db.scalars(stmt).all()
 
 
-def get_medicine(db: Session, medicine_id: int) -> Medicine:
-    return get_or_404(db, Medicine, medicine_id, "Лекарство")
+def get_medicine(db: Session, owner: User, medicine_id: int) -> Medicine:
+    return get_own_medicine(db, owner, medicine_id)
 
 
-def create_medicine(db: Session, data: MedicineCreate) -> Medicine:
+def create_medicine(db: Session, owner: User, data: MedicineCreate) -> Medicine:
     if data.category_id is not None:
         resolve_reference(db, Category, data.category_id, "Категория")
-    medicine = Medicine(**data.model_dump())
+    medicine = Medicine(**data.model_dump(), owner_id=owner.id)
     db.add(medicine)
     db.commit()
     db.refresh(medicine)
     return medicine
 
 
-def update_medicine(db: Session, medicine_id: int, data: MedicineUpdate) -> Medicine:
-    medicine = get_medicine(db, medicine_id)
+def update_medicine(db: Session, owner: User, medicine_id: int, data: MedicineUpdate) -> Medicine:
+    medicine = get_medicine(db, owner, medicine_id)
     changes = data.model_dump(exclude_unset=True)
 
     if changes.get("category_id") is not None:
@@ -96,8 +98,8 @@ def update_medicine(db: Session, medicine_id: int, data: MedicineUpdate) -> Medi
     return medicine
 
 
-def delete_medicine(db: Session, medicine_id: int) -> None:
+def delete_medicine(db: Session, owner: User, medicine_id: int) -> None:
     """Вместе с лекарством удаляется его запись в списке на передачу."""
-    medicine = get_medicine(db, medicine_id)
+    medicine = get_medicine(db, owner, medicine_id)
     db.delete(medicine)
     db.commit()

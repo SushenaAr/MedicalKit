@@ -1,5 +1,9 @@
 """Заполнение БД демонстрационными данными (те же, что во frontend).
 
+Создаются два пользователя (пароли только для демонстрации!):
+    demo@example.com  / Demo12345   — владелец демонстрационных лекарств;
+    admin@example.com / Admin12345  — администратор: может изменять приюты и категории.
+
 Запуск из папки backend:
     python -m app.seed           — заполнить, если база пустая
     python -m app.seed --reset   — очистить таблицы и заполнить заново
@@ -10,8 +14,25 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select, text
 
+from app.core.security import hash_password
 from app.db.session import SessionLocal
-from app.models import Category, Donation, DonationStatus, Medicine, MedicineForm, Shelter, ShelterKind
+from app.models import (
+    Category,
+    Donation,
+    DonationStatus,
+    Medicine,
+    MedicineForm,
+    Shelter,
+    ShelterKind,
+    User,
+    UserRole,
+)
+
+# email, имя, пароль, роль
+USERS = [
+    ("demo@example.com", "Демо-пользователь", "Demo12345", UserRole.USER),
+    ("admin@example.com", "Администратор", "Admin12345", UserRole.ADMIN),
+]
 
 CATEGORIES = [
     "Жаропонижающие и обезболивающие",
@@ -63,12 +84,23 @@ def seed(reset: bool = False) -> None:
     with SessionLocal() as db:
         if reset:
             db.execute(text(
-                "TRUNCATE donations, medicines, shelter_categories, shelters, categories "
-                "RESTART IDENTITY CASCADE"
+                "TRUNCATE refresh_tokens, users, donations, medicines, shelter_categories, shelters, "
+                "categories RESTART IDENTITY CASCADE"
             ))
         elif db.scalar(select(Medicine.id).limit(1)) is not None:
             print("В базе уже есть данные. Чтобы заполнить заново: python -m app.seed --reset")
             return
+
+        users: dict[str, User] = {}
+        for email, name, password, role in USERS:
+            # Демо-пользователь мог появиться при миграции, если в базе уже были лекарства
+            user = db.scalar(select(User).where(User.email == email))
+            if user is None:
+                user = User(email=email, name=name, role=role)
+                db.add(user)
+            user.password_hash = hash_password(password)
+            users[email] = user
+        owner = users["demo@example.com"]
 
         categories = {name: Category(name=name) for name in CATEGORIES}
         db.add_all(categories.values())
@@ -87,7 +119,7 @@ def seed(reset: bool = False) -> None:
             medicines[name] = Medicine(
                 name=name, substance=substance, form=form, quantity=quantity,
                 expires_at=today + timedelta(days=days), opened=opened, location=location,
-                category=categories[category], notes=notes,
+                category=categories[category], notes=notes, owner=owner,
             )
         db.add_all(medicines.values())
 
@@ -102,8 +134,9 @@ def seed(reset: bool = False) -> None:
         ])
         db.commit()
         print(
-            f"Добавлено: категорий — {len(categories)}, приютов — {len(shelters)}, "
-            f"лекарств — {len(medicines)}, передач — 2"
+            f"Добавлено: пользователей — {len(users)}, категорий — {len(categories)}, "
+            f"приютов — {len(shelters)}, лекарств — {len(medicines)}, передач — 2\n"
+            "Вход: demo@example.com / Demo12345, администратор: admin@example.com / Admin12345"
         )
 
 

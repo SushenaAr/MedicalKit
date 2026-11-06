@@ -7,6 +7,11 @@ pydantic==2.14.1
 pydantic-settings==2.16.0
 alembic==1.20.0
 
+# Аутентификация: JWT, хеширование паролей, проверка email
+PyJWT==2.15.1
+argon2-cffi==25.1.0
+email-validator==2.3.0
+
 # Тесты
 pytest==9.1.1
 httpx==0.28.1

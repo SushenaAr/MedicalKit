@@ -2,9 +2,10 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.api.deps import DbSession
-from app.api.routes import categories, donations, medicines, shelters
+from app.api.routes import auth, categories, donations, medicines, shelters
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(auth.router)
 api_router.include_router(medicines.router)
 api_router.include_router(categories.router)
 api_router.include_router(shelters.router)

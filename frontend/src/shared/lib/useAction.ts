@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { errorMessage } from '../api/fakeRequest.ts'
+import { errorMessage } from '../api/errors.ts'
 import { useNotify } from '../ui/notifications/useNotify.ts'
 
 interface ActionOptions<R> {

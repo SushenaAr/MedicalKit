@@ -9,12 +9,14 @@ from app.core.config import settings
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
-        version="0.2.0",
+        version="0.3.0",
         description="API домашней аптечки: лекарства, сроки годности и передача лекарств в приюты.",
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        # Нужно для cookie с refresh-токеном, если frontend обращается к API с другого адреса
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
